@@ -8,17 +8,17 @@ def ler_csvs():
     Lê os arquivos reais fornecidos, aplicando tratamentos de encoding e separadores.
     """
     try:
-        df_comex = pd.read_csv('exportabra2020-2026.csv', sep=',', dtype={'CO_NCM': str, 'CO_PAIS': str})
+        df_comex = pd.read_csv('.exportabra2020-2026.csv', sep=',', dtype={'CO_NCM': str, 'CO_PAIS': str})
     except Exception:
         df_comex = pd.DataFrame()
 
     try:
-        df_globais = pd.read_csv('dados_globais.csv', sep=';', dtype={'CO_PAIS': str})
+        df_globais = pd.read_csv('.dados_globais.csv', sep=';', dtype={'CO_PAIS': str})
     except Exception:
         df_globais = pd.DataFrame()
 
     try:
-        df_bens = pd.read_csv('Importacao_Bens.csv', sep=',', dtype={'CO_NCM': str})
+        df_bens = pd.read_csv('.Importacao_Bens.csv', sep=',', dtype={'CO_NCM': str})
     except Exception:
         df_bens = pd.DataFrame()
 
