@@ -1,130 +1,252 @@
 import streamlit as st
 import pandas as pd
-from calculo import ler_csvs, calcular_matriz
+import re
+import base64
+from pathlib import Path
+from calculo import ler_csvs, buscar_ncms_por_termo, calcular_matriz
 
 # ==========================================
 # CONFIGURAÇÃO DA PÁGINA
 # ==========================================
-st.set_page_config(page_title="ExportAI", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(
+    page_title="ExportAI — Inteligência em Comércio Exterior",
+    layout="wide",
+    initial_sidebar_state="expanded",
+    page_icon=".logo.png"
+)
 
+# ==========================================
+# GESTÃO DE SESSÃO / ESTADO
+# ==========================================
+if "usuario_logado" not in st.session_state:
+    st.session_state.usuario_logado = False
+
+if "pagina_login" not in st.session_state:
+    st.session_state.pagina_login = "login"
+
+# ==========================================
+# ESTILIZACÃO CUSTOMIZADA (CSS)
+# ==========================================
 st.markdown("""
 <style>
     .stApp { background-color: #f8fafc; }
-    .main-title { font-size: 48px; font-weight: 800; color: #111827; text-align: center; margin-top: 30px; margin-bottom: 10px; }
-    .subtitle { font-size: 20px; color: #6b7280; text-align: center; margin-bottom: 40px; }
-    .section-title { font-size: 24px; font-weight: 700; color: #111827; margin-bottom: 10px; }
-    .result-title { font-size: 30px; font-weight: 800; color: #111827; margin-bottom: 20px; }
-    .footer { text-align: center; color: #9ca3af; margin-top: 60px; }
+    .brand-header { display: flex; justify-content: center; align-items: center; margin-bottom: 20px; }
+    .main-logo { width: 180px; height: auto; }
+    .login-card {
+        background: white; border: 1px solid #dfe5ea; border-radius: 12px;
+        padding: 30px; box-shadow: 0 4px 18px rgba(10, 37, 64, 0.08); max-width: 500px; margin: 0 auto;
+    }
+    .hero-title { color: #0a2540; font-size: 28px; font-weight: 800; text-align: center; }
+    .hero-subtitle { color: #5f6b76; font-size: 15px; text-align: center; margin-bottom: 25px; }
+    .section-head { font-size: 20px; font-weight: 700; color: #111827; margin-bottom: 15px; }
 </style>
 """, unsafe_allow_html=True)
 
-# ==========================================
-# CACHE DE DADOS (STREAMLIT)
-# ==========================================
-@st.cache_data
-def carregar_dados():
-    try:
-        return ler_csvs()
-    except FileNotFoundError as e:
-        st.error(f"Arquivo não encontrado: {e.filename}")
-        return None, None
+# Helper para carregar imagens em base64
+def get_base64_logo():
+    for p in ["logo.png", "logo(1).png", "logo(3).png"]:
+        path = Path(__file__).with_name(p)
+        if path.exists():
+            return base64.b64encode(path.read_bytes()).decode("utf-8")
+    return None
+
+logo_b64 = get_base64_logo()
 
 # ==========================================
-# CABEÇALHO E INPUTS
+# TELA 1: LOGIN E CADASTRO
 # ==========================================
-st.markdown('<div class="main-title">ExportAI</div>', unsafe_allow_html=True)
-st.markdown('<div class="subtitle">Encontre os mercados mais promissores para exportar seus produtos.</div>', unsafe_allow_html=True)
-
-col1, col2, col3 = st.columns([1, 2, 1])
-
-with col2:
-    st.markdown('<div class="section-title">Comece sua análise</div>', unsafe_allow_html=True)
-    ncm = st.text_input("Informe o código NCM", placeholder="Ex: 39211900")
-    exporta = st.radio("Sua empresa já exporta?", ["Sim", "Não"], horizontal=True)
-    if exporta == "Sim":
-        st.multiselect("Países atuais", ["Argentina", "Chile", "Estados Unidos", "Alemanha", "México"])
-    analisar = st.button("🚀 Executar análise", use_container_width=True)
-
-# ==========================================
-# EXECUÇÃO E RESULTADOS
-# ==========================================
-if analisar:
-    if not ncm:
-        st.warning("⚠️ Digite um NCM para realizar a análise.")
-    else:
-        df_comex, df_globais = carregar_dados()
+if not st.session_state.usuario_logado:
+    if logo_b64:
+        st.markdown(f'<div class="brand-header"><img class="main-logo" src="data:image/png;base64,{logo_b64}"></div>', unsafe_allow_html=True)
+    
+    st.markdown('<div class="hero-title">Acesse o ExportAI</div>', unsafe_allow_html=True)
+    st.markdown('<div class="hero-subtitle">Inteligência para expansão de mercados internacionais</div>', unsafe_allow_html=True)
+    
+    st.markdown('<div class="login-card">', unsafe_allow_html=True)
+    
+    if st.session_state.pagina_login == "login":
+        st.subheader("Entrar")
+        email = st.text_input("E-mail corporativo", key="log_email")
+        senha = st.text_input("Senha", type="password", key="log_senha")
         
-        if df_comex is not None and df_globais is not None:
-            with st.spinner("Analisando mercados e calculando matriz..."):
-                df_resultado = calcular_matriz(ncm, df_comex, df_globais)
-            
-            if df_resultado.empty:
-                st.warning(f"Nenhum dado cruzado encontrado para o NCM **{ncm}**. Verifique os arquivos.")
+        if st.button("Entrar", type="primary", use_container_width=True):
+            if email and senha:
+                st.session_state.usuario_logado = True
+                st.rerun()
             else:
-                st.success(f"Análise concluída para o NCM **{ncm}**.")
-                st.divider()
+                st.warning("Preencha todos os campos para continuar.")
                 
-                # Exibição dos cards
-                st.markdown('<div class="result-title">🌎 Mercados mais promissores</div>', unsafe_allow_html=True)
-                for i, row in df_resultado.iterrows():
-                    c1, c2, c3, c4 = st.columns([0.5, 2, 1, 1.5])
-                    with c1: st.markdown(f"### {i + 1}º")
-                    with c2: st.markdown(f"### {row['Nome_Pais']}")
-                    with c3: st.metric("Score ExportAI", f"{row['Score_Final']:.1f}")
-                    with c4: st.metric("Crescimento (5 anos)", f"{row['Crescimento_5_Anos']:.1f}%")
-                    st.divider()
+        if st.button("Criar nova conta empresarial", use_container_width=True):
+            st.session_state.pagina_login = "cadastro"
+            st.rerun()
+            
+    else:
+        st.subheader("Cadastro Empresarial")
+        empresa = st.text_input("Nome da empresa *")
+        cnpj = st.text_input("CNPJ *")
+        email_cad = st.text_input("E-mail corporativo *")
+        senha_cad = st.text_input("Senha *", type="password")
+        
+        if st.button("Finalizar Cadastro", type="primary", use_container_width=True):
+            if empresa and cnpj and email_cad and senha_cad:
+                st.success("Conta criada com sucesso!")
+                st.session_state.pagina_login = "login"
+                st.rerun()
+            else:
+                st.error("Preencha os campos obrigatórios.")
                 
-                # Gráfico
-                st.markdown("### Comparação do Score Final")
-                chart_data = df_resultado.set_index("Nome_Pais")[["Score_Final"]]
-                st.bar_chart(chart_data)
-                
-                # ==========================================
-                # MEMÓRIA DE CÁLCULO E TABELA DE DADOS
-                # ==========================================
-                st.markdown("---")
-                st.markdown("### 🔍 Metodologia e Dados")
-                
-                with st.expander("Como a pontuação é calculada?"):
-                    st.markdown("""
-                    Para criar uma pontuação justa, todos os valores são primeiramente **normalizados em uma escala de 0 a 1** (onde o melhor país recebe nota 1 e os demais notas proporcionais). Após isso, aplicamos os seguintes pesos:
-                    
-                    **Fase 1: Histórico de Mercado (Peso máximo: 0.6 ou 60%)**
-                    * 20%: Volume financeiro já exportado pelo Brasil (FOB).
-                    * 20%: Volume de importação global do país alvo.
-                    * 20%: Crescimento da importação do país alvo nos últimos 5 anos.
-                    
-                    **Fase 2: Macroeconomia e Tarifas (Peso máximo: 0.4 ou 40%)**
-                    * 10%: Score do Banco Mundial (*Ease of Doing Business* / Risco).
-                    * 10%: Projeção de Crescimento do PIB do país.
-                    * Até 20%: Acordos Comerciais com o Brasil (100% de isenção = +0.20 | 50% a 99% = +0.15 | < 50% = +0.10).
-                    
-                    A soma final é multiplicada por 100 para criar o *Score ExportAI* (0 a 100).
-                    """)
-                
-                with st.expander("Ver Tabela de Dados da Matriz"):
-                    st.write("Abaixo estão os dados reais utilizados e os cálculos intermediários gerados pelo sistema após o agrupamento:")
-                    colunas_exibicao = [
-                        'Nome_Pais', 'Valor_Exportado', 'Valor_Importado', 'Crescimento_5_Anos',
-                        'WB_Score', 'WB_Projecao', 'Preferencia_Percentual', 'Score_Fase1', 'Score_Final'
-                    ]
-                    st.dataframe(df_resultado[colunas_exibicao].style.format({
-                        'Valor_Exportado': '${:,.0f}',
-                        'Valor_Importado': '${:,.0f}',
-                        'Score_Fase1': '{:.3f}',
-                        'Score_Final': '{:.1f}'
-                    }))
-                
-                with st.expander("Ver Registros Brutos (Aparições do NCM)"):
-                    st.write(f"Abaixo estão todas as linhas onde o NCM **{ncm}** apareceu originalmente na base de exportação do Brasil:")
-                    
-                    # Filtra a base original apenas com o NCM pesquisado
-                    df_ncm_bruto = df_comex[df_comex['CO_NCM'] == int(ncm)]
-                    
-                    # Formata a visualização dos valores em Dólar e Quilos para ficar amigável
-                    st.dataframe(df_ncm_bruto.style.format({
-                        'VL_FOB': '${:,.0f}',
-                        'KG_LIQUIDO': '{:,.0f} kg'
-                    }))
+        if st.button("Já tenho uma conta", use_container_width=True):
+            st.session_state.pagina_login = "login"
+            st.rerun()
 
-st.markdown('<div class="footer">ExportAI • Inteligência para novos mercados</div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+    st.stop()
+
+# ==========================================
+# TELA 2: APLICAÇÃO PRINCIPAL (PÓS-LOGIN)
+# ==========================================
+
+# Carregamento de dados em Cache
+@st.cache_data
+def carregar_dados_sistema():
+    return ler_csvs()
+
+df_comex, df_globais, df_bens = carregar_dados_sistema()
+
+# Barra Lateral
+with st.sidebar:
+    if logo_b64:
+        st.markdown(f'<img src="data:image/png;base64,{logo_b64}" style="width: 100%; margin-bottom: 20px;">', unsafe_allow_html=True)
+    st.title("ExportAI")
+    
+    modulo = st.radio(
+        "Selecione o Módulo",
+        ["Módulo Básico (Mercados)", "Módulo Diagnóstico (Checklist)", "Módulo Vendas (Prospecção)"]
+    )
+    
+    st.divider()
+    if st.button("Sair / Logout", use_container_width=True):
+        st.session_state.usuario_logado = False
+        st.rerun()
+
+# ------------------------------------------
+# MÓDULO 1: BÁSICO (RADIOGRAFIA DE MERCADO)
+# ------------------------------------------
+if modulo == "Módulo Básico (Mercados)":
+    st.title("🌎 Módulo Básico — Radiografia de Mercado")
+    st.caption("Identifique os mercados globais mais promissores para seu produto através do NCM, SH4/SH6 ou nome.")
+
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        termo_busca = st.text_input(
+            "Pesquise por NCM (8 dígitos), SH4/SH6 (4 ou 6 dígitos) ou Nome do Produto:",
+            placeholder="Ex: 39211900, 3921 ou Plástico"
+        )
+    
+    with col2:
+        exporta_ja = st.radio("Sua empresa já exporta?", ["Não", "Sim"], horizontal=True)
+
+    if termo_busca:
+        ncms_encontrados = buscar_ncms_por_termo(termo_busca, df_comex)
+        
+        if not ncms_encontrados:
+            st.warning(f"Nenhum registro encontrado para a busca '{termo_busca}'.")
+        else:
+            st.info(f"Foram identificados **{len(ncms_encontrados)}** NCM(s) correspondentes.")
+            
+            if st.button("🚀 Executar Análise de Mercado", type="primary"):
+                with st.spinner("Processando dados consolidados e matriz tarifária..."):
+                    df_res = calcular_matriz(ncms_encontrados, df_comex, df_globais)
+                
+                if df_res.empty:
+                    st.warning("Não há dados de exportação cruzados suficientes para a seleção.")
+                else:
+                    st.subheader("Top Mercados Indicados")
+                    for idx, row in df_res.iterrows():
+                        c1, c2, c3, c4 = st.columns([1, 3, 2, 2])
+                        c1.markdown(f"### #{idx+1}")
+                        c2.markdown(f"**{row.get('Nome_Pais', 'País')}**")
+                        c3.metric("Score ExportAI", f"{row.get('Score_Final', 0):.1f}/100")
+                        c4.metric("Crescimento (5a)", f"{row.get('Crescimento_5_Anos', 0):.1f}%")
+                        st.divider()
+
+                    st.subheader("Comparativo Visual de Desempenho")
+                    chart_data = df_res.set_index("Nome_Pais")[["Score_Final"]]
+                    st.bar_chart(chart_data)
+
+# ------------------------------------------
+# MÓDULO 2: DIAGNÓSTICO DE PREPARAÇÃO
+# ------------------------------------------
+elif modulo == "Módulo Diagnóstico (Checklist)":
+    st.title("📋 Módulo Diagnóstico — Prontidão Exportadora")
+    st.caption("Checklist interativo para empresas iniciantes avaliarem seu grau de maturidade.")
+
+    with st.form("checklist_exportacao"):
+        st.markdown("**Capacidade Operacional e Financeira**")
+        c1 = st.checkbox("Sua empresa tem capacidade fabril ociosa para atender novos pedidos?")
+        c2 = st.checkbox("Possui certificações internacionais exigidas no seu setor?")
+        
+        st.markdown("**Adequação de Produto e Embalagem**")
+        c3 = st.checkbox("A embalagem possui rótulo traduzido ou adaptável a exigências externas?")
+        c4 = st.checkbox("O produto possui NCM/SH definido corretamente?")
+        
+        st.markdown("**Estratégia e Equipe**")
+        c5 = st.checkbox("Existe equipe ou responsável com domínio de idiomas (ex: Inglês/Espanhol)?")
+        
+        calcular = st.form_submit_button("Analisar Maturidade")
+        
+        if calcular:
+            pontos = sum([c1, c2, c3, c4, c5])
+            porcentagem = (pontos / 5) * 100
+            st.subheader(f"Nível de Prontidão: {porcentagem:.0f}%")
+            if porcentagem >= 80:
+                st.success("Sua empresa apresenta excelente maturidade para iniciar operações internacionais!")
+            elif porcentagem >= 40:
+                st.warning("Sua empresa tem potencial, mas precisa ajustar processos regulatórios e operacionais.")
+            else:
+                st.error("Recomendamos estruturar os pré-requisitos operacionais básicos antes de exportar.")
+
+# ------------------------------------------
+# MÓDULO 3: VENDAS E PROSPECÇÃO
+# ------------------------------------------
+elif modulo == "Módulo Vendas (Prospecção)":
+    st.title("🎯 Módulo Vendas — Prospecção & Automação")
+    st.caption("Identifique parceiros comerciais e gere cartas de apresentação automáticas.")
+
+    col_p, col_i = st.columns(2)
+    with col_p:
+        pais_destino = st.selectbox("Selecione o País de Destino:", ["Argentina", "Estados Unidos", "Alemanha", "Chile", "México"])
+    with col_i:
+        idioma = st.selectbox("Idioma da Comunicação:", ["Inglês", "Espanhol", "Alemão"])
+
+    st.subheader("Empresas e Parceiros em Destaque")
+    df_parceiros = pd.DataFrame({
+        "Empresa": ["Global Import Corp", "Mercado Sur Distribuidora", "EuroTrade Trading"],
+        "País": ["Estados Unidos", "Argentina", "Alemanha"],
+        "Porte": ["Grande", "Médio", "Grande"],
+        "Contato Contatado": ["import@globalcorp.com", "contacto@mercadosur.ar", "supply@eurotrade.de"]
+    })
+    st.dataframe(df_parceiros[df_parceiros["País"] == pais_destino] if pais_destino in df_parceiros["País"].values else df_parceiros, use_container_width=True)
+
+    st.divider()
+    st.subheader("Gerador de Carta de Apresentação Automatizada")
+    
+    prod_nome = st.text_input("Nome do seu Produto:", "Produtos de Plástico Industrial")
+    
+    if st.button("Gerar E-mail de Apresentação"):
+        if idioma == "Inglês":
+            corpo = f"Subject: Commercial Proposal - {prod_nome}\n\nDear Partner,\n\nWe are a Brazilian manufacturer specialized in {prod_nome}. We noticed your strong market presence in {pais_destino} and would like to present our export catalog with competitive tariffs under international standards.\n\nBest regards,"
+        elif idioma == "Espanhol":
+            corpo = f"Asunto: Propuesta Comercial - {prod_nome}\n\nEstimados,\n\nSomos fabricantes en Brasil de {prod_nome}. Evaluando el mercado de {pais_destino}, nos gustaría presentar nuestro catálogo de exportación.\n\nSaludos cordiales,"
+        else:
+            corpo = f"Betreff: Geschäftsvorschlag - {prod_nome}\n\nSehr geehrte Damen und Herren,\n\nwir sind ein brasilianischer Hersteller von {prod_nome}. Wir möchten Ihnen unseren Exportkatalog für {pais_destino} vorstellen.\n\nMit freundlichen Grüßen,"
+            
+        st.text_area("Prévia do E-mail Gerado:", corpo, height=180)
+        st.button("✉️ Enviar E-mail Automaticamente")
+
+# ==========================================
+# RODAPÉ
+# ==========================================
+st.markdown("---")
+st.markdown('<div style="text-align:center; color:#9ca3af;">ExportAI © 2026 • Soluções Inteligentes em Comércio Exterior</div>', unsafe_allow_html=True)
